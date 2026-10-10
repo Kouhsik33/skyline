@@ -7,8 +7,20 @@ import * as repository from './repository.js';
 // LEDGER_CONFLICT (500 + error log), which rolls the caller's transaction back.
 
 export function createLedgerService({ db, logger }) {
-  async function post(trx, entry) {
+  /**
+   * occurredAt is required, except for PAYMENT sources: there it defaults to the payment's
+   * settled_at, read in the caller's transaction (OQ-16). Group 1 handlers rely on this.
+   */
+  async function withOccurredAt(trx, entry) {
+    if (entry.occurredAt != null) return { ...entry, occurredAt: entry.occurredAt instanceof Date ? entry.occurredAt : new Date(entry.occurredAt) };
+    if (entry.sourceType !== 'PAYMENT' || !entry.paymentId) return entry;
+    const payment = await trx('payments').where({ id: entry.paymentId }).first('settled_at');
+    return payment?.settled_at ? { ...entry, occurredAt: new Date(payment.settled_at) } : entry;
+  }
+
+  async function post(trx, rawEntry) {
     if (!trx) throw new TypeError('ledger.post requires a transaction');
+    const entry = await withOccurredAt(trx, rawEntry);
     const problems = validateLedgerEntry(entry);
     if (problems.length) throw new TypeError(`Invalid ledger entry: ${problems.join('; ')}`);
 

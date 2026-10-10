@@ -1,9 +1,5 @@
 import { toCamelCase } from '../../shared/caseMap.js';
 
-function mapTerm(t) {
-  return t ? toCamelCase(typeof t === 'object' && t.plan_name ? t : t) : t;
-}
-
 export function createMembershipController({ membershipService, plansService }) {
   return {
     async listPlans(req, res) {

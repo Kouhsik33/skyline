@@ -155,8 +155,8 @@ describe('migration 012: published announcements are immutable', () => {
     const [draft] = await ctx.db('announcements').insert({ ...base, status: 'DRAFT' }).returning('*');
     await ctx.db('announcements').where({ id: draft.id }).update({ title: 'Meet (edited)' });
     const [pub] = await ctx.db('announcements').insert({ ...base, status: 'PUBLISHED', published_by: head.id, published_at: new Date() }).returning('*');
-    await expect(ctx.db('announcements').where({ id: pub.id }).update({ title: 'x' })).rejects.toThrow(/published announcement is not allowed/);
-    await expect(ctx.db('announcements').where({ id: pub.id }).del()).rejects.toThrow(/published announcement is not allowed/);
+    await expect(ctx.db('announcements').where({ id: pub.id }).update({ title: 'x' })).rejects.toThrow(/published announcements are immutable/); // 012
+    await expect(ctx.db('announcements').where({ id: pub.id }).del()).rejects.toThrow(/published announcements are immutable/); // 015
     await ctx.db('announcements').where({ id: draft.id }).del();
     await expect(ctx.db('announcements').insert({ ...base, status: 'PUBLISHED' })).rejects.toThrow(/check constraint/);
   });

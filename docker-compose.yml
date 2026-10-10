@@ -1,5 +1,4 @@
 # Student Organization Management System — dev stack (LLD §1.1).
-# Backend only for Group 2 (OQ-02). The frontend service is added by T-14.
 name: soms
 
 services:
@@ -32,11 +31,12 @@ services:
       PORT: 4000
       DATABASE_URL: postgres://soms:soms@db:5432/soms
       TEST_DATABASE_URL: postgres://soms:soms@db:5432/soms_test
-      # TODO(group1): delete when Group 1 merges. `fixture` applies tests/fixtures/group1_schema.sql
-      # in place of Group 1 migrations 002/003/006/007 (OQ-01).
-      GROUP1_SCHEMA: ${GROUP1_SCHEMA:-fixture}
+      # Dev only: the entrypoint runs the idempotent demo seed after migrating (docs/DEMO_ACCOUNTS.md).
+      SEED_ON_START: ${SEED_ON_START:-true}
       LLD_PATH: /docs/LLD.md
       UPLOAD_DIR: /app/uploads
+      # Behind the frontend nginx (one hop). Cookie Secure stays off: local stack is plain HTTP.
+      TRUST_PROXY: 1
     ports:
       - "${BACKEND_PORT:-4000}:4000"
     volumes:
@@ -53,6 +53,21 @@ services:
       timeout: 3s
       retries: 20
       start_period: 20s
+
+  # Production build of the SPA (nginx). Same origin for /api, deep-link fallback (B6).
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ | grep -q '<div id=\"root\">' && wget -qO- http://127.0.0.1/api/v1/health | grep -q '\"db\":\"ok\"'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
 volumes:
   pgdata:

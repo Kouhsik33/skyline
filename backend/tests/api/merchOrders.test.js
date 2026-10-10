@@ -69,7 +69,7 @@ describe('orders (T-62)', () => {
     const placed = await placeOrder(buyer, club.club.id, [{ variantId: variants.M.id, quantity: 3 }], 120000);
     await pay(buyer, placed.body.data.payment.id, 'FAILED');
     expect(await variantRow(ctx.db, variants.M.id)).toMatchObject({ stock_on_hand: 5, stock_reserved: 0 });
-    expect((await ctx.db('orders').where({ id: placed.body.data.order.id }).first())).toMatchObject({ status: 'CANCELLED', cancel_reason: 'FAILED' });
+    expect((await ctx.db('orders').where({ id: placed.body.data.order.id }).first())).toMatchObject({ status: 'CANCELLED', cancel_reason: 'USER_SIMULATED_FAIL' }); // Group 1 simulate reason
     expect(await ctx.db('financial_transactions')).toHaveLength(0);
     expect((await ctx.db('stock_movements').where({ type: 'RELEASE' }).first()).quantity).toBe(-3);
   });
@@ -117,7 +117,8 @@ describe('orders (T-62)', () => {
     expect(res.body.error.code).toBe('MEMBERS_ONLY_PRODUCT');
     const member = await makeUser(ctx.db);
     const { term } = await makeActiveMember(ctx.db, club, member);
-    const ok = await placeOrder(await ctx.signIn(member.id), club.club.id, [{ variantId: variants.M.id, quantity: 1 }], 30000);
+    // Real PricingPolicy: the member's plan gives 10 % off → 27 000.
+    const ok = await placeOrder(await ctx.signIn(member.id), club.club.id, [{ variantId: variants.M.id, quantity: 1 }], 27000);
     expect(ok.status).toBe(201);
     expect(ok.body.data.order.buyerType).toBe('MEMBER');
     expect((await ctx.db('orders').where({ id: ok.body.data.order.id }).first()).membership_term_id).toBe(term.id);

@@ -1,7 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { authApi } from '../api/endpoints';
 import { onUnauthorized } from '../api/client';
+import { clearClientState } from './clientState';
 
 const AuthContext = createContext(null);
 
@@ -11,6 +13,18 @@ const AuthContext = createContext(null);
  */
 export function AuthProvider({ children }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  // queryClient.clear() detaches the live ['me'] observer from the cache; re-rendering makes it
+  // attach to the fresh entry, so a new identity (or null) shows at once.
+  const [, rerender] = useReducer((n) => n + 1, 0);
+  const wipe = useCallback(
+    (nextMe) => {
+      clearClientState(qc);
+      qc.setQueryData(['me'], nextMe);
+      rerender();
+    },
+    [qc],
+  );
   const me = useQuery({
     queryKey: ['me'],
     queryFn: () => authApi.me().catch((e) => (e.code === 'UNAUTHENTICATED' ? null : Promise.reject(e))),
@@ -19,18 +33,26 @@ export function AuthProvider({ children }) {
   });
 
   useEffect(() => {
-    onUnauthorized(() => qc.setQueryData(['me'], null));
-  }, [qc]);
+    // Session expired or revoked: wipe the previous user's data. Only when someone was signed in —
+    // clearing while anonymous would drop the pending /auth/me query and refetch it in a loop.
+    onUnauthorized(() => {
+      if (qc.getQueryData(['me'])) wipe(null);
+      else qc.setQueryData(['me'], null);
+    });
+  }, [qc, wipe]);
 
   const refresh = useCallback(() => qc.invalidateQueries({ queryKey: ['me'] }), [qc]);
   const signOut = useCallback(async () => {
     try {
       await authApi.logout();
     } finally {
-      qc.clear();
-      qc.setQueryData(['me'], null);
+      wipe(null);
+      navigate('/login', { replace: true });
     }
-  }, [qc]);
+  }, [wipe, navigate]);
+
+  // A new sign-in starts from an empty cache, whatever the previous user left behind.
+  const setSession = useCallback((payload) => wipe(payload), [wipe]);
 
   const value = useMemo(() => {
     const data = me.data;
@@ -43,7 +65,7 @@ export function AuthProvider({ children }) {
       capabilities: caps || null,
       refresh,
       signOut,
-      setSession: (payload) => qc.setQueryData(['me'], payload),
+      setSession,
       rolesIn,
       hasRole: (clubId, ...roles) => rolesIn(clubId).some((r) => roles.includes(r)),
       isVerified: !!caps?.verifiedStudent,
@@ -52,7 +74,7 @@ export function AuthProvider({ children }) {
       organizerOf: caps?.organizerOf || [],
       staffOf: caps?.staffOf || [],
     };
-  }, [me.data, me.isPending, me.error, refresh, signOut, qc]);
+  }, [me.data, me.isPending, me.error, refresh, signOut, setSession]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

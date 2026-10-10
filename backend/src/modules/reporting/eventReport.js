@@ -1,4 +1,3 @@
-import { toCamelCase } from '../../shared/caseMap.js';
 
 export function createEventReportService({ db }) {
   return {

@@ -47,7 +47,7 @@ export async function createPlan(db, clubId, createdBy, overrides = {}) {
   return plan;
 }
 
-export async function verifyStudent(db, userId, studentIdentifier, fullName = 'Asha Rao') {
+export async function verifyStudent(db, userId, studentIdentifier, _fullName = 'Asha Rao') {
   const sid = studentIdentifier ?? `SRKR-TEST-${userId.slice(0, 8)}`;
   const crypto = await import('node:crypto');
   const hash = crypto

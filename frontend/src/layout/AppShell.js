@@ -14,8 +14,8 @@ import Brand from '../components/Brand';
 import { Button, IconButton } from '../components/Button';
 import { PageLoader } from '../components/feedback';
 import { LABELS } from '../utils/status';
+import { LAST_CLUB_KEY } from '../auth/clientState';
 
-const LAST_CLUB_KEY = 'soms.lastClub';
 
 function useClubs() {
   return useQuery({ queryKey: ['clubs'], queryFn: () => clubsApi.list(), staleTime: 300000 });
@@ -187,7 +187,6 @@ function UserMenu() {
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  const navigate = useNavigate();
   useDismiss(ref, open, setOpen);
   if (!user) {
     return (
@@ -228,8 +227,7 @@ function UserMenu() {
             style={{ color: 'var(--color-danger)' }}
             onClick={async () => {
               setOpen(false);
-              await signOut();
-              navigate('/');
+              await signOut(); // clears all user data and replaces history with /login
             }}
           >
             <SignOut size={18} aria-hidden /> Sign out

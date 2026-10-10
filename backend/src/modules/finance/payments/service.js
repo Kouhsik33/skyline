@@ -1,4 +1,5 @@
 import { appError } from '../../../shared/errors.js';
+import { UNIQUE_VIOLATION_CODES } from '../../../shared/middleware/errorHandler.js';
 import { paymentReference } from '../../../shared/tokens.js';
 import { toOffset } from '../../../shared/pagination.js';
 import { OPEN_STATUSES, SETTLE_OUTCOMES, planSimulation, validateNewPayment } from '../domain/paymentStateMachine.js';
@@ -42,8 +43,8 @@ export function createPaymentService({ db, withTransaction, clock, registry, tim
           }),
         );
       } catch (err) {
-        if (err?.code === '23505' && err.constraint === 'payments_reference_key' && attempt < REFERENCE_ATTEMPTS) continue;
-        if (err?.code === '23505' && /^payments_live_/.test(err.constraint ?? '')) throw appError('PAYMENT_ALREADY_PENDING');
+        if (err?.code === '23505' && /^payments_reference_(key|unique)$/.test(err.constraint ?? '') && attempt < REFERENCE_ATTEMPTS) continue;
+        if (err?.code === '23505' && UNIQUE_VIOLATION_CODES[err.constraint] === 'PAYMENT_ALREADY_PENDING') throw appError('PAYMENT_ALREADY_PENDING');
         throw err;
       }
     }

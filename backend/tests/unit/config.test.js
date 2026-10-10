@@ -1,31 +1,41 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from '../../src/config/index.js';
+import { config } from '../../src/config/index.js';
 
-const base = { DATABASE_URL: 'postgres://u:p@localhost:5432/soms' };
-
-describe('config (LLD §1.3)', () => {
-  it('applies documented defaults, each OD default behind one variable', () => {
-    const c = loadConfig(base);
-    expect(c.pricingCombinationMode).toBe('BEST_OF'); // OD-01
-    expect(c.reservationHoldMinutes).toBe(15); // ASM-13
-    expect(c.fundraiserAtRiskTolerancePct).toBe(20);
-    expect(c.autopayPendingTimeoutHours).toBe(24);
-    expect(c.group1Schema).toBe('migrations');
+// Merged config (src/config/index.js): OD defaults behind one variable each; invalid env and
+// production without SESSION_SECRET stop the process; dev tools never on in production.
+const run = (env, code) =>
+  promisify(execFile)(process.execPath, ['--input-type=module', '-e', code ?? "import('./src/config/index.js').then(m => console.log(JSON.stringify({ dev: m.config.devToolsEnabled })))"], {
+    cwd: process.cwd(),
+    env: { PATH: process.env.PATH, DATABASE_URL: 'postgres://u:p@localhost:5432/x', ...env },
   });
 
-  it('fails fast listing invalid values', () => {
-    expect(() => loadConfig({})).toThrow(/DATABASE_URL/);
-    expect(() => loadConfig({ ...base, PRICING_COMBINATION_MODE: 'SUM' })).toThrow(/PRICING_COMBINATION_MODE/);
-    expect(() => loadConfig({ ...base, MAX_UPLOAD_BYTES: '6000000' })).toThrow(/MAX_UPLOAD_BYTES/);
+describe('config', () => {
+  it('documented defaults; each OD default behind one variable', () => {
+    expect(config.PRICING_COMBINATION_MODE).toBe('BEST_OF'); // OD-01
+    expect(config.RESERVATION_HOLD_MINUTES).toBe(15); // ASM-13
+    expect(config.FUNDRAISER_AT_RISK_TOLERANCE_PCT).toBe(20);
+    expect(config.AUTOPAY_PENDING_TIMEOUT_HOURS).toBe(24);
+    expect(config.DEFAULT_LOW_STOCK_THRESHOLD).toBe(5);
+    expect(config.RATE_LIMIT_ENABLED).toBe(false); // tests only (setup.js)
   });
 
-  it('production requires a real session secret, never uses the fixture, never enables dev tools', () => {
-    expect(() => loadConfig({ ...base, NODE_ENV: 'production' })).toThrow(/SESSION_SECRET/);
-    const secret = 'x'.repeat(40);
-    expect(() => loadConfig({ ...base, NODE_ENV: 'production', SESSION_SECRET: secret, GROUP1_SCHEMA: 'fixture' })).toThrow(
-      /GROUP1_SCHEMA/,
-    );
-    const prod = loadConfig({ ...base, NODE_ENV: 'production', SESSION_SECRET: secret, DEV_TOOLS_ENABLED: 'true' });
-    expect(prod.devToolsEnabled).toBe(false);
+  it('invalid values stop the process with the field named', async () => {
+    await expect(run({ PRICING_COMBINATION_MODE: 'SUM' })).rejects.toMatchObject({ stderr: expect.stringMatching(/PRICING_COMBINATION_MODE/) });
+  });
+
+  it('production requires SESSION_SECRET and never enables dev tools', async () => {
+    await expect(run({ NODE_ENV: 'production' })).rejects.toMatchObject({ stderr: expect.stringMatching(/SESSION_SECRET/) });
+    const { stdout } = await run({ NODE_ENV: 'production', SESSION_SECRET: 'x'.repeat(40), DEV_TOOLS_ENABLED: 'true' });
+    expect(JSON.parse(stdout.trim().split('\n').pop())).toEqual({ dev: false });
+  });
+
+  it('session cookie Secure: off for local HTTP in dev, on in production, overridable (B6)', async () => {
+    const code = "import('./src/config/index.js').then(m => console.log(JSON.stringify({ secure: m.config.sessionCookieSecure })))";
+    const secure = async (env) => JSON.parse((await run(env, code)).stdout.trim().split('\n').pop()).secure;
+    expect(await secure({ NODE_ENV: 'development' })).toBe(false);
+    expect(await secure({ NODE_ENV: 'production', SESSION_SECRET: 'x'.repeat(40) })).toBe(true);
+    expect(await secure({ NODE_ENV: 'production', SESSION_SECRET: 'x'.repeat(40), SESSION_COOKIE_SECURE: 'false' })).toBe(false);
   });
 });

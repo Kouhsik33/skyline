@@ -1,6 +1,5 @@
-import { applyBps } from '../shared/money.js';
-import { appError } from '../shared/errors.js';
-import { todayIST } from '../shared/clock.js';
+import { quoteMerchItem } from '../modules/pricing/index.js';
+import { now, todayIST } from '../shared/clock.js';
 
 /**
  * Group 1 implementations of interfaces expected by Group 2 modules (access, finance, merch, fundraisers).
@@ -87,45 +86,15 @@ export function createGroup1Bridge({ db, authRepository, authz }) {
     },
   };
 
-  const pricing = {
-    async quoteMerchItem(product, benefits, now, { mode = 'BEST_OF' } = {}) {
-      if (!benefits && !product.availableToNonMembers) {
-        throw appError('MEMBERS_ONLY_PRODUCT');
-      }
-      let listPricePaise = Number(product.pricePaise);
-      let priceRule = 'LIST';
-      const offerStart = product.offerStartsAt ? new Date(product.offerStartsAt).getTime() : null;
-      const offerEnd = product.offerEndsAt ? new Date(product.offerEndsAt).getTime() : null;
-      const t = now.getTime();
-      if (product.offerPricePaise != null && offerStart != null && offerEnd != null && t >= offerStart && t <= offerEnd) {
-        listPricePaise = Number(product.offerPricePaise);
-        priceRule = 'OFFER';
-      }
-      let discountPaise = 0;
-      if (benefits && product.memberDiscountEligible !== false) {
-        const memberDisc = applyBps(listPricePaise, benefits.merchDiscountBps ?? 0);
-        if (mode === 'STACK' || priceRule === 'LIST') {
-          discountPaise = memberDisc;
-          if (memberDisc > 0) priceRule = 'MEMBER_DISCOUNT';
-        } else if (memberDisc > 0 && mode === 'BEST_OF') {
-          discountPaise = memberDisc;
-          priceRule = 'MEMBER_DISCOUNT';
-        }
-      }
-      const finalPricePaise = Math.max(0, listPricePaise - discountPaise);
-      return { listPricePaise, discountPaise, finalPricePaise, priceRule };
-    },
-  };
+  // The one merchandise pricing implementation lives in the pricing module (OQ-07, TC-MER-05).
+  const pricing = { quoteMerchItem };
 
   return Object.freeze({ auth, clubs, events, memberships, pricing, authRepository, authz });
 }
 
-/** Injectable clock for Group 2 ({ now, todayIST }). */
+/** Group 2's clock reads the shared clock, so one setClock() (tests, dev asOf) moves both groups. */
 export function createAppClock() {
-  return {
-    now: () => new Date(),
-    todayIST,
-  };
+  return { now, todayIST };
 }
 
 export function toGroup2Config(config) {
@@ -139,5 +108,8 @@ export function toGroup2Config(config) {
     notifyMode: config.NOTIFY_MODE,
     devNotifyFailChannel: config.DEV_NOTIFY_FAIL_CHANNEL,
     fundraiserAtRiskTolerancePct: config.fundraiserAtRiskTolerancePct ?? 20,
+    reservationHoldMinutes: config.RESERVATION_HOLD_MINUTES,
+    autopayPendingTimeoutHours: config.AUTOPAY_PENDING_TIMEOUT_HOURS,
+    defaultLowStockThreshold: config.DEFAULT_LOW_STOCK_THRESHOLD,
   };
 }

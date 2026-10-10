@@ -15,7 +15,7 @@ const UPLOAD_ROOT = '/tmp/soms-test-uploads';
 async function storedFiles() {
   const out = [];
   async function walk(dir) {
-    let entries = [];
+    let entries;
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {

@@ -1,26 +1,6 @@
-// G2-STUB: dispatch is minimal; full dispatcher owned by Group 2.
-import { config } from '../../config/index.js';
-import { createDevEmailAdapter } from './adapters/DevEmailAdapter.js';
-import { createDevWhatsAppAdapter } from './adapters/DevWhatsAppAdapter.js';
-import { createUnconfiguredEmailAdapter } from './adapters/UnconfiguredEmailAdapter.js';
-import { createUnconfiguredWhatsAppAdapter } from './adapters/UnconfiguredWhatsAppAdapter.js';
-
-function pickAdapters() {
-  if (config.NOTIFY_MODE === 'dev') {
-    return {
-      EMAIL: createDevEmailAdapter(),
-      WHATSAPP: createDevWhatsAppAdapter(),
-    };
-  }
-  return {
-    EMAIL: createUnconfiguredEmailAdapter(),
-    WHATSAPP: createUnconfiguredWhatsAppAdapter(),
-  };
-}
-
+// Group 1 enqueue (writes outbox rows). Delivery is Group 2's dispatcher: the
+// notification-dispatch job (every minute) sends these rows; dispatchBatch is kept for callers.
 export function createNotificationService({ notificationRepository }) {
-  const adapters = pickAdapters();
-
   return {
     /**
      * @param {import('knex').Knex.Transaction} trx

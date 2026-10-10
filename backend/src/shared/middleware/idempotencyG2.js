@@ -78,7 +78,7 @@ export function createIdempotency({ db, clock, logger }) {
       try {
         const key = req.get('Idempotency-Key');
         if (!key || !UUID.test(key)) throw appError('IDEMPOTENCY_KEY_REQUIRED');
-        const userId = req.actor?.userId;
+        const userId = req.actor?.userId ?? req.userId;
         if (!userId) throw appError('UNAUTHENTICATED');
         const path = req.baseUrl + req.path;
         // Multipart: the uploaded file's SHA-256 is part of the request identity.
@@ -98,7 +98,7 @@ export function createIdempotency({ db, clock, logger }) {
         const send = res.json.bind(res);
         res.json = (body) => {
           complete(userId, key.toLowerCase(), res.statusCode, body)
-            .catch((err) => logger.error({ requestId: req.id, err }, 'idempotency: failed to store response'))
+            .catch((err) => logger.error({ requestId: req.requestId ?? req.id, err }, "idempotency: failed to store response"))
             .finally(() => send(body));
           return res;
         };

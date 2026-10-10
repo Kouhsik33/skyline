@@ -8,7 +8,7 @@ import { toCamelCase } from '../../../shared/caseMap.js';
  * @typedef {{ purpose: string, onSucceeded: Function, onFailed: Function }} PaymentPurposeHandler
  */
 
-export function createPaymentService({ paymentRepository, handlerRegistry, ledgerService, config }) {
+export function createPaymentService({ paymentRepository, handlerRegistry, ledgerService: _ledgerService, config }) {
   const terminal = new Set(['SUCCEEDED', 'FAILED', 'EXPIRED']);
 
   async function create(input, trx) {
@@ -75,11 +75,12 @@ export function createPaymentService({ paymentRepository, handlerRegistry, ledge
     return withTransaction(async (trx) => {
       const payment = await paymentRepository.findByIdForUpdate(paymentId, trx);
       assertFound(payment, 'Payment not found');
+      // Someone else's payment does not exist for the caller (LLD §4.0: not owned -> 404).
       if (payment.userId !== actorUserId) {
-        throw new AppError('FORBIDDEN', 403, 'Forbidden');
+        throw new AppError('NOT_FOUND', 404, 'Payment not found');
       }
       if (payment.method === 'SIMULATED_AUTOPAY') {
-        throw new AppError('FORBIDDEN', 403, 'Use dev tools for AutoPay payments');
+        throw new AppError('FORBIDDEN', 403, 'Use dev tools for AutoPay payments', { reason: 'AUTOPAY_PAYMENT' });
       }
       if (terminal.has(payment.status)) {
         return { payment, result: null };
@@ -105,7 +106,7 @@ export function createPaymentService({ paymentRepository, handlerRegistry, ledge
       const payment = await paymentRepository.findById(paymentId);
       assertFound(payment, 'Payment not found');
       if (payment.userId !== actorUserId) {
-        throw new AppError('FORBIDDEN', 403, 'Forbidden');
+        throw new AppError('NOT_FOUND', 404, 'Payment not found');
       }
       return payment;
     },
@@ -113,13 +114,10 @@ export function createPaymentService({ paymentRepository, handlerRegistry, ledge
     async listMine(userId, query = {}) {
       const page = Math.max(1, Number(query.page) || 1);
       const pageSize = Math.min(100, Math.max(1, Number(query.pageSize) || 20));
-      const rows = await paymentRepository.listByUser(userId, {
-        purpose: query.purpose,
-        status: query.status,
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
-      });
-      return { data: rows, page, pageSize, total: rows.length };
+      const filters = { purpose: query.purpose, status: query.status };
+      const rows = await paymentRepository.listByUser(userId, { ...filters, limit: pageSize, offset: (page - 1) * pageSize });
+      const total = await paymentRepository.countByUser(userId, filters);
+      return { data: rows, page, pageSize, total };
     },
   };
 }

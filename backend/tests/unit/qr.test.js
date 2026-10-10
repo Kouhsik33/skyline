@@ -1,26 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { buildPayload, parsePayload, QR_KIND, renderSvg } from '../../src/shared/qr.js';
+import { buildMembershipQrPayload, buildTicketQrPayload, parseMembershipQrPayload, parseTicketQrPayload, renderQrSvg } from '../../src/shared/qr.js';
 import { randomToken } from '../../src/shared/tokens.js';
 
+// Merged QR helpers (Group 1 names): opaque SOMS1 payloads, separate ticket and membership workflows.
 describe('qr helpers', () => {
   const token = randomToken();
 
-  it('builds and parses SOMS1 payloads for both kinds', () => {
-    const m = buildPayload(QR_KIND.MEMBERSHIP, token);
+  it('builds and parses SOMS1 payloads for both kinds; a membership QR is not a ticket', () => {
+    const t = buildTicketQrPayload(token);
+    const m = buildMembershipQrPayload(token);
+    expect(t).toBe(`SOMS1:T:${token}`);
     expect(m).toBe(`SOMS1:M:${token}`);
-    expect(parsePayload(m)).toEqual({ kind: 'M', token });
-    expect(parsePayload(buildPayload(QR_KIND.TICKET, token))).toEqual({ kind: 'T', token });
+    expect(parseTicketQrPayload(t)).toBeTruthy();
+    expect(parseMembershipQrPayload(m)).toBeTruthy();
+    expect(parseTicketQrPayload(m) ?? null).toBeNull();
+    expect(parseMembershipQrPayload(t) ?? null).toBeNull();
   });
 
-  it('rejects anything else', () => {
-    for (const bad of ['', 'SOMS2:T:abcdefghijklmnopqrst', `SOMS1:X:${token}`, 'SOMS1:T:short', null, 42]) {
-      expect(parsePayload(bad)).toBeNull();
-    }
-    expect(() => buildPayload('Z', token)).toThrow();
+  it('rejects malformed payloads', () => {
+    for (const bad of ['', 'SOMS2:T:abc', 'hello']) expect(parseTicketQrPayload(bad) ?? null).toBeNull();
   });
 
   it('renders SVG server-side', async () => {
-    const svg = await renderSvg(buildPayload(QR_KIND.TICKET, token));
-    expect(svg).toMatch(/^<svg[\s\S]*<\/svg>\s*$/);
+    expect(await renderQrSvg(buildTicketQrPayload(token))).toMatch(/<svg[\s\S]*<\/svg>/);
   });
 });

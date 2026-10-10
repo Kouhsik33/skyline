@@ -1,62 +1,21 @@
-import crypto from 'node:crypto';
-import { AppError } from '../errors.js';
 import { db } from '../../db/knex.js';
+import { logger } from '../logger.js';
+import { now, todayIST } from '../clock.js';
+import { createIdempotency } from './idempotencyG2.js';
 
-function hashRequest(req) {
-  const body = req.body ? JSON.stringify(req.body) : '';
-  return crypto.createHash('sha256').update(`${req.method}:${req.path}:${body}`).digest('hex');
-}
+// One Idempotency-Key implementation for both groups (LLD §3.1, §4.0; OQ-23). Group 1 routes keep
+// their two names; both now delegate to the atomic Group 2 middleware:
+//   key must be a UUID (IDEMPOTENCY_KEY_REQUIRED), claim is INSERT … ON CONFLICT (no race → no
+//   500), same key + different request → IDEMPOTENCY_KEY_REUSED, concurrent duplicate →
+//   REQUEST_IN_PROGRESS, response stored before it is sent, 5xx releases the key, 24 h expiry.
 
-export function requireIdempotencyKey(req, _res, next) {
-  const key = req.headers['idempotency-key'];
-  if (!key || typeof key !== 'string') {
-    return next(new AppError('IDEMPOTENCY_KEY_REQUIRED', 400, 'Idempotency-Key header is required'));
-  }
-  req.idempotencyKey = key;
+const middleware = createIdempotency({ db, clock: { now, todayIST }, logger })();
+
+/** Kept for Group 1 route definitions; key validation now happens in idempotencyMiddleware. */
+export function requireIdempotencyKey(_req, _res, next) {
   next();
 }
 
 export function idempotencyMiddleware() {
-  return async (req, res, next) => {
-    if (!req.idempotencyKey || !req.userId) return next();
-
-    const requestHash = hashRequest(req);
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    const existing = await db('idempotency_keys')
-      .where({ user_id: req.userId, key: req.idempotencyKey })
-      .first();
-
-    if (existing) {
-      if (existing.request_hash !== requestHash) {
-        return next(new AppError('IDEMPOTENCY_KEY_REUSED', 409, 'Idempotency key reused with different body'));
-      }
-      if (existing.status_code == null) {
-        return next(new AppError('REQUEST_IN_PROGRESS', 409, 'Request in progress'));
-      }
-      res.status(existing.status_code);
-      return res.json(existing.response_body);
-    }
-
-    await db('idempotency_keys').insert({
-      user_id: req.userId,
-      key: req.idempotencyKey,
-      method: req.method,
-      path: req.path,
-      request_hash: requestHash,
-      locked_at: db.fn.now(),
-      expires_at: expiresAt,
-    });
-
-    const originalJson = res.json.bind(res);
-    res.json = (body) => {
-      db('idempotency_keys')
-        .where({ user_id: req.userId, key: req.idempotencyKey })
-        .update({ status_code: res.statusCode, response_body: body })
-        .catch(() => {});
-      return originalJson(body);
-    };
-
-    next();
-  };
+  return middleware;
 }

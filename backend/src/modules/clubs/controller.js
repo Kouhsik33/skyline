@@ -1,7 +1,7 @@
 export function createClubController({ clubService }) {
   return {
     async list(req, res) {
-      const result = await clubService.listClubs(req.query);
+      const result = await clubService.listClubs(req.valid?.query ?? req.query);
       res.json({ data: result.items, meta: { page: result.page, pageSize: result.pageSize } });
     },
 

@@ -18,5 +18,11 @@ export function createClubFinanceReportingRoutes({ controller, requireAuth, requ
     requireClubRole(['CLUB_HEAD', 'TREASURER']),
     controller.financeReport,
   );
+  for (const [path, handler] of [
+    ['/clubs/:clubId/reports/memberships', controller.membershipReport],
+    ['/clubs/:clubId/reports/merchandise', controller.merchandiseReport],
+  ]) {
+    r.get(path, requireAuth, validate({ params: clubIdParams }), requireClubRole(['CLUB_HEAD', 'TREASURER']), handler);
+  }
   return r;
 }

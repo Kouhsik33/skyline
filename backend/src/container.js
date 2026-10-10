@@ -63,12 +63,24 @@ import {
 
 import { createEventReportService, createEventReportingRoutes } from './modules/reporting/index.js';
 
+import { createJobRunner } from './jobs/runJob.js';
+import { createJobRegistry } from './jobs/registry.js';
+import { createJobDevRoutes } from './jobs/devRoutes.js';
+import { now as clockNow, todayIST } from './shared/clock.js';
 import { createMembershipExpiryJob } from './jobs/definitions/membershipExpiry.js';
 import { createRenewalRemindersJob } from './jobs/definitions/renewalReminders.js';
 import { createAutopayRenewalsJob } from './jobs/definitions/autopayRenewals.js';
-import { createReservationExpiryJob } from './jobs/definitions/reservationExpiry.js';
 
-export function createContainer() {
+/**
+ * Composition root. `options` are for tests only:
+ *   paymentHandlerOverrides  { PURPOSE: handler } replacing a registered handler
+ *   wrapPaymentHandler       (handler) => handler, e.g. to count calls around the real handler
+ *   devToolsEnabled          overrides config.devToolsEnabled
+ *   group2                   passed to wireGroup2 (bridgeOverrides, notificationAdapters, storage, configOverrides)
+ */
+export function createContainer(options = {}) {
+  const { paymentHandlerOverrides = {}, wrapPaymentHandler = (h) => h, group2: group2Options = {} } = options;
+  const devToolsEnabled = options.devToolsEnabled ?? config.devToolsEnabled;
   const auditRepository = createAuditRepository(db);
   const authz = createClubAuthz({ db });
 
@@ -96,7 +108,9 @@ export function createContainer() {
   const notificationService = createNotificationService({ notificationRepository });
 
   const paymentRepository = createPaymentRepository({ db });
+  // One registry for both payment engines (Group 1 service.g1 and Group 2 service).
   const handlerRegistry = createPaymentHandlerRegistry();
+  const registerHandler = (handler) => handlerRegistry.register(wrapPaymentHandler(paymentHandlerOverrides[handler.purpose] ?? handler));
 
   const membershipRepository = createMembershipRepository({ db });
 
@@ -115,7 +129,7 @@ export function createContainer() {
     clubRepository,
   });
 
-  handlerRegistry.register(
+  registerHandler(
     createMembershipPaymentHandler({
       membershipRepository,
       clubRepository,
@@ -123,7 +137,7 @@ export function createContainer() {
       notificationService,
     }),
   );
-  handlerRegistry.register(
+  registerHandler(
     createMembershipRenewalPaymentHandler({
       membershipRepository,
       clubRepository,
@@ -134,7 +148,7 @@ export function createContainer() {
 
   const eventRepository = createEventRepository({ db });
 
-  handlerRegistry.register(
+  registerHandler(
     createTicketPaymentHandler({
       eventRepository,
       ledgerService,
@@ -185,27 +199,40 @@ export function createContainer() {
     reporting: createEventReportingRoutes({ eventReportService, authz, eventRepository }),
   };
 
-  const group2 = wireGroup2({ db, config, bridge: group1Bridge });
+  const group2 = wireGroup2({ db, config, bridge: group1Bridge, registry: handlerRegistry, ...group2Options });
   routes.group2 = group2.router;
 
-  const jobs = {
-    membershipExpiry: createMembershipExpiryJob({ db }),
-    renewalReminders: createRenewalRemindersJob({ db, notificationService }),
-    autopayRenewals: createAutopayRenewalsJob({
-      db,
-      membershipRepository,
-      paymentService,
-      authService,
-      notificationService,
-    }),
-    reservationExpiry: createReservationExpiryJob({ db, paymentService }),
-  };
+  // Every scheduled job (LLD §7) in one table, run through the Group 2 job runner (T-51):
+  // advisory lock per job, one job_runs row per day for daily jobs, failures recorded.
+  const membershipExpiry = createMembershipExpiryJob({ db });
+  const renewalReminders = createRenewalRemindersJob({ db, notificationService });
+  const autopayRenewals = createAutopayRenewalsJob({ db, membershipRepository, paymentService, authService, notificationService });
+  const runJob = createJobRunner({ db, clock: { now: clockNow, todayIST }, logger });
+  const jobs = createJobRegistry({
+    runJob,
+    clock: { now: clockNow, todayIST },
+    timeZone: config.APP_TIMEZONE,
+    definitions: {
+      'membership-expiry': { cron: '5 0 * * *', daily: true, run: () => membershipExpiry.execute() },
+      'autopay-renewals': { cron: '0 6 * * *', daily: true, run: () => autopayRenewals.execute() },
+      'renewal-reminders': { cron: '0 9 * * *', daily: true, run: () => db.transaction((trx) => renewalReminders.execute(trx)) },
+      ...group2.jobDefinitions,
+    },
+  });
+
+  // Dev tools (LLD §4.11): 404 unless DEV_TOOLS_ENABLED and not production.
+  if (devToolsEnabled) {
+    routes.dev = [...group2.devRouters, createJobDevRoutes({ registry: jobs, requireAuth: group2.routeDeps.requireAuth })];
+  }
 
   return {
     db,
     config,
     routes,
     jobs,
+    runJob,
+    handlerRegistry,
+    group2,
     services: {
       authService,
       clubService,

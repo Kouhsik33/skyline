@@ -1,9 +1,15 @@
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import { config } from '../../config/index.js';
-import { db } from '../../db/knex.js';
 
 const PgSession = connectPgSimple(session);
+
+export const SESSION_COOKIE_NAME = 'sid';
+
+/** One source for the cookie flags, so logout clears exactly the cookie login set. */
+export function sessionCookieOptions() {
+  return { httpOnly: true, sameSite: 'lax', secure: config.sessionCookieSecure, path: '/' };
+}
 
 export function createSessionMiddleware() {
   return session({
@@ -14,14 +20,12 @@ export function createSessionMiddleware() {
       tableName: 'user_sessions',
       createTableIfMissing: false,
     }),
-    name: 'sid',
+    name: SESSION_COOKIE_NAME,
     secret: config.sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: config.isProduction,
+      ...sessionCookieOptions(),
       maxAge: 7 * 24 * 60 * 60 * 1000,
     },
   });

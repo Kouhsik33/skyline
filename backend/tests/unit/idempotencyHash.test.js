@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { requestHash } from '../../src/shared/middleware/idempotency.js';
+import { requestHash } from '../../src/shared/middleware/idempotencyG2.js';
 
 describe('idempotency request hash', () => {
   it('is stable under key order and differs on method, path or body', () => {

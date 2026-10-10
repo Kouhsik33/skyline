@@ -81,7 +81,7 @@ describe('runJob (T-51)', () => {
     const { default: cron } = await import('node-cron');
     const before = cron.getTasks().size;
     scheduler.start();
-    expect(cron.getTasks().size - before).toBe(2);
+    expect(cron.getTasks().size - before).toBe(ctx.container.jobs.names().length); // all 5 jobs of both groups
     await scheduler.stop();
   });
 });
@@ -100,7 +100,8 @@ describe('POST /dev/jobs/:jobName/run', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ job: 'reservation-expiry', status: 'SUCCEEDED', summary: { due: 0 } });
     expect((await agent.post('/api/v1/dev/jobs/notification-dispatch/run').set(H).send({})).body.data.status).toBe('SUCCEEDED');
-    expect((await agent.post('/api/v1/dev/jobs/membership-expiry/run').set(H).send({})).status).toBe(404); // Group 1 job, not registered yet
+    expect((await agent.post('/api/v1/dev/jobs/membership-expiry/run').set(H).send({})).status).toBe(200); // Group 1 job, now in the same table
+    expect((await agent.post('/api/v1/dev/jobs/no-such-job/run').set(H).send({})).status).toBe(404);
     expect((await agent.post('/api/v1/dev/jobs/reservation-expiry/run').set(H).send({ asOf: 'yesterday' })).status).toBe(400);
     expect((await request(ctx.app).post('/api/v1/dev/jobs/reservation-expiry/run').set(H).send({})).status).toBe(401);
   });

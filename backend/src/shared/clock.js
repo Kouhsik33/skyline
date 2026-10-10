@@ -47,3 +47,8 @@ export function addDaysToDate(dateStr, days) {
   dt.setUTCDate(dt.getUTCDate() + days);
   return dt.toISOString().slice(0, 10);
 }
+
+/** YYYY-MM-DD of an instant in a time zone (job run keys, LLD §7). */
+export function isoDateInZone(instant, timeZone) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(instant);
+}

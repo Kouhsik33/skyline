@@ -6,14 +6,29 @@ import { config } from './config/index.js';
 import { logger } from './shared/logger.js';
 import { requestIdMiddleware } from './shared/middleware/requestId.js';
 import { createSessionMiddleware } from './shared/middleware/session.js';
-import { errorHandler } from './shared/middleware/errorHandler.js';
+import { errorHandler, notFoundHandler } from './shared/middleware/errorHandler.js';
 import { globalRateLimit } from './shared/middleware/rateLimits.js';
+import { csrfHeader } from './shared/middleware/csrfHeader.js';
 import { db } from './db/knex.js';
 
-export function createApp(container) {
+/**
+ * Options are for tests only: `beforeRoutes(router)` mounts test-only routes; `httpLogger`
+ * replaces the request logger (to capture and check redaction). Production passes neither.
+ */
+export function createApp(container, { beforeRoutes, httpLogger } = {}) {
   const app = express();
+  app.disable('x-powered-by');
+  if (config.TRUST_PROXY > 0) app.set('trust proxy', config.TRUST_PROXY);
 
+  // First, so every response — including body-parser errors — carries X-Request-Id.
+  app.use(requestIdMiddleware);
   app.use(helmet());
+  // B5: API data is per-user and private. no-store keeps it out of the HTTP cache and bfcache, so
+  // Back after logout (or a second user in the same tab) can never be served the first user's data.
+  app.use('/api', (_req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+  });
   app.use(
     cors({
       origin: config.CORS_ORIGIN,
@@ -21,10 +36,17 @@ export function createApp(container) {
     }),
   );
   app.use(express.json({ limit: '1mb' }));
-  app.use(requestIdMiddleware);
-  app.use(pinoHttp({ logger }));
+  // LLD §9 request log fields: requestId and userId on every line (redaction is in the logger).
+  app.use(
+    pinoHttp({
+      logger: httpLogger ?? logger,
+      customProps: (req) => ({ requestId: req.requestId, userId: req.session?.userId ?? null }),
+    }),
+  );
   app.use(globalRateLimit);
   app.use(createSessionMiddleware());
+  // ADR-004: every state-changing request needs X-Requested-With: soms (login/register exempt).
+  app.use(csrfHeader);
 
   app.get('/api/v1/health', async (_req, res) => {
     try {
@@ -52,9 +74,13 @@ export function createApp(container) {
   }
 
   const api = express.Router();
-  Object.values(container.routes).forEach((router) => api.use(router));
+  beforeRoutes?.(api);
+  Object.values(container.routes)
+    .flat()
+    .forEach((router) => api.use(router));
   app.use('/api/v1', api);
 
+  app.use(notFoundHandler);
   app.use(errorHandler);
 
   return app;

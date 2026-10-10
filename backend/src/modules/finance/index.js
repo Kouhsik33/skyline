@@ -2,8 +2,8 @@ import { createLedgerService } from './ledger/service.js';
 import { createHandlerRegistry } from './payments/handlerRegistry.js';
 import { createPaymentService } from './payments/service.js';
 import { createSimulator } from './payments/simulator.js';
-import { createPaymentController } from './payments/controller.js';
-import { createDevPaymentRoutes, createPaymentRoutes } from './payments/routes.g2.js';
+import { createPaymentController } from './payments/controller.g2.js';
+import { createClubPaymentRoutes, createDevPaymentRoutes, createPaymentRoutes } from './payments/routes.g2.js';
 import { createLocalFileStorage } from './files/LocalFileStorage.js';
 import { assertFileStorage } from './files/FileStorage.js';
 import { createFileService } from './files/service.js';
@@ -21,9 +21,10 @@ import { createFundraiserLinkCheck } from './fundraiserLink.js';
 //   fundraiserMoney, simulator.decide (LLD §2.10, scope map §4.2).
 // Cross-module lookups (event club, fundraiser club) are injected functions (OQ-25).
 
-export function createFinanceModule({ db, withTransaction, clock, config, logger, access, auth, getEventClub, getFundraiserRef, storage }) {
+export function createFinanceModule({ db, withTransaction, clock, config, logger, access, auth, getEventClub, getFundraiserRef, storage, registry: sharedRegistry }) {
   const timeZone = config.timezone;
-  const registry = createHandlerRegistry();
+  // The container passes the backend-wide registry so every engine dispatches to the same handlers.
+  const registry = sharedRegistry ?? createHandlerRegistry();
   const ledger = createLedgerService({ db, logger });
   const payments = createPaymentService({ db, withTransaction, clock, registry, timeZone, logger });
   const simulator = createSimulator({ autopayOutcome: config.simAutopayOutcome });
@@ -51,6 +52,7 @@ export function createFinanceModule({ db, withTransaction, clock, config, logger
     storage: fileStorage,
     financeRoutes: (deps) => createFinanceRoutes({ controller, upload, ...deps }),
     paymentRoutes: (deps) => createPaymentRoutes({ controller: paymentController, ...deps }),
+    clubPaymentRoutes: (deps) => createClubPaymentRoutes({ controller: paymentController, ...deps }),
     routes: (deps) => {
       const router = createPaymentRoutes({ controller: paymentController, ...deps });
       router.use(createFinanceRoutes({ controller, upload, ...deps }));

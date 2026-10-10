@@ -2,7 +2,7 @@ import './loadEnv.js';
 
 const shared = {
   client: 'pg',
-  pool: { min: 0, max: 10 },
+  pool: { min: 0, max: Number(process.env.DATABASE_POOL_MAX ?? 10) },
   migrations: {
     directory: './src/db/migrations',
     tableName: 'knex_migrations',

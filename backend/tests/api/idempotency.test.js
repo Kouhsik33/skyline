@@ -28,7 +28,7 @@ describe('Idempotency-Key (TC-PAY-02)', () => {
     const key = idemKey();
     const first = await simulate(agent, payment.id, { outcome: 'SUCCEEDED' }, key);
     expect(first.status).toBe(200);
-    expect(first.body.data.result).toEqual({ handled: 'MEMBERSHIP_JOIN' });
+    expect(first.body.data.result).toMatchObject({ membershipStatus: 'ACTIVE' }); // real handler
 
     ctx.clock.advance({ minutes: 5 });
     const replay = await simulate(agent, payment.id, { outcome: 'SUCCEEDED' }, key);
@@ -95,7 +95,7 @@ describe('Idempotency-Key (TC-PAY-02)', () => {
     const agent = await ctx.signIn(user.id);
     const key = idemKey();
     const path = `/api/v1/payments/${payment.id}/simulate`;
-    const { requestHash } = await import('../../src/shared/middleware/idempotency.js');
+    const { requestHash } = await import('../../src/shared/middleware/idempotencyG2.js');
     await ctx.db('idempotency_keys').insert({
       user_id: user.id,
       key,

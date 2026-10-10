@@ -1,6 +1,6 @@
 import { CHANNELS, render, validatePayload } from './templates.js';
 import { afterFailure, MAX_ATTEMPTS, STUCK_AFTER_MS } from './domain/retryPolicy.js';
-import * as repository from './repository.js';
+import * as repository from './repository.g2.js';
 
 // Transactional outbox (ADR-014, LLD §2.7, §7).
 //   enqueue(trx, items)  — inside the caller's business transaction; ON CONFLICT (dedupe_key)

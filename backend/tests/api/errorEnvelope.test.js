@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { buildTestContext } from '../helpers/testApp.js';
 import { createLogger } from '../../src/shared/logger.js';
 import { appError } from '../../src/shared/errors.js';
+import { logger as appLogger } from '../../src/shared/logger.js';
+import { vi } from 'vitest';
 import { validate } from '../../src/shared/middleware/validate.js';
 
 // T-12 acceptance: every error returns { error: { code, message, details, requestId } } with the
@@ -62,10 +64,12 @@ describe('error envelope, request id, security headers', () => {
   });
 
   it('unexpected error → 500 INTERNAL_ERROR, safe message, stack logged not sent', async () => {
+    const spy = vi.spyOn(appLogger, 'error');
     const res = await request(ctx.app).get('/api/v1/__test/boom');
     expectEnvelope(res, 500, 'INTERNAL_ERROR');
     expect(res.body.error.message).not.toContain('secret internal detail');
-    expect(logLines.join('')).toContain('secret internal detail');
+    expect(spy.mock.calls.some(([o]) => String(o?.err?.stack ?? '').includes('secret internal detail'))).toBe(true);
+    spy.mockRestore();
   });
 
   it('AppError keeps its code and details', async () => {
@@ -100,7 +104,7 @@ describe('error envelope, request id, security headers', () => {
   it('helmet headers are set; x-powered-by is not', async () => {
     const res = await request(ctx.app).get('/api/v1/health');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: 'ok', db: 'ok' });
+    expect(res.body).toEqual({ data: { status: 'ok', db: 'ok' } }); // merged health shape (Group 1)
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['content-security-policy']).toBeTruthy();
     expect(res.headers['x-powered-by']).toBeUndefined();
@@ -119,7 +123,7 @@ describe('error envelope, request id, security headers', () => {
     await agent.get('/api/v1/me/payments').expect(200);
     await agent.post('/api/v1/__test/echo').set('X-Requested-With', 'soms').send({ amountPaise: 777123 }).expect(200);
     const out = logLines.join('');
-    expect(out).toContain('"path":"/api/v1/me/payments"');
+    expect(out).toContain('"url":"/api/v1/me/payments"'); // pino-http request log
     expect(out).toContain(`"userId":"${user.id}"`);
     expect(out).not.toContain(sid);
     expect(out).not.toContain(rawSessionId);

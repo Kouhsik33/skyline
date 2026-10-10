@@ -7,5 +7,6 @@ export default defineConfig({
     hookTimeout: 60000,
     testTimeout: 30000,
     setupFiles: ['./tests/helpers/setup.js'],
+    globalSetup: ['./tests/helpers/globalSetup.js'],
   },
 });

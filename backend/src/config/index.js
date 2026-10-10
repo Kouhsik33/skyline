@@ -45,6 +45,17 @@ const envSchema = z.object({
     .transform((v) => v !== 'false')
     .default('true'),
   FUNDRAISER_AT_RISK_TOLERANCE_PCT: z.coerce.number().default(20),
+  DEFAULT_LOW_STOCK_THRESHOLD: z.coerce.number().int().min(0).default(5),
+  /** false only in tests: the authorization matrices send far more than 300 requests a minute. */
+  RATE_LIMIT_ENABLED: z
+    .string()
+    .transform((v) => v !== 'false')
+    .default('true'),
+  DATABASE_POOL_MAX: z.coerce.number().int().min(2).max(100).default(10),
+  /** Session cookie Secure flag. Unset = true only in production; local HTTP needs false (B6). */
+  SESSION_COOKIE_SECURE: z.enum(['true', 'false']).optional(),
+  /** Express 'trust proxy' (hop count) when the API sits behind the frontend nginx. */
+  TRUST_PROXY: z.coerce.number().int().min(0).default(0),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -64,6 +75,8 @@ export const config = {
   ...env,
   sessionSecret: process.env.SESSION_SECRET || 'dev-session-secret-not-for-production',
   isProduction: env.NODE_ENV === 'production',
+  sessionCookieSecure:
+    env.SESSION_COOKIE_SECURE != null ? env.SESSION_COOKIE_SECURE === 'true' : env.NODE_ENV === 'production',
   isTest: env.NODE_ENV === 'test',
   devToolsEnabled: env.DEV_TOOLS_ENABLED && env.NODE_ENV !== 'production',
   fundraiserAtRiskTolerancePct: env.FUNDRAISER_AT_RISK_TOLERANCE_PCT,

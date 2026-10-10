@@ -8,7 +8,7 @@ export function csrfHeader(req, _res, next) {
     return next();
   }
   if (req.headers['x-requested-with'] !== 'soms') {
-    return next(new AppError('FORBIDDEN', 403, 'Missing CSRF header'));
+    return next(new AppError('FORBIDDEN', 403, 'Missing X-Requested-With header', { reason: 'CSRF_HEADER_MISSING' }));
   }
   return next();
 }

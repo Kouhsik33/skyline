@@ -1,6 +1,6 @@
 import { todayIST, addDaysToDate } from '../../shared/clock.js';
 
-export function createRenewalRemindersJob({ db, notificationService }) {
+export function createRenewalRemindersJob({ db: _db, notificationService }) {
   return {
     name: 'renewal-reminders',
     async execute(trx) {

@@ -1,4 +1,4 @@
-import { regenerateSession } from '../../shared/middleware/session.js';
+import { regenerateSession, SESSION_COOKIE_NAME, sessionCookieOptions } from '../../shared/middleware/session.js';
 
 export function createAuthController({ authService }) {
   return {
@@ -20,6 +20,7 @@ export function createAuthController({ authService }) {
       await new Promise((resolve, reject) => {
         req.session.destroy((err) => (err ? reject(err) : resolve()));
       });
+      res.clearCookie(SESSION_COOKIE_NAME, sessionCookieOptions());
       res.status(204).send();
     },
 

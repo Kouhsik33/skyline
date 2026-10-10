@@ -40,6 +40,14 @@ export function createPaymentRepository({ db }) {
       return rows.map(toCamelCase);
     },
 
+    async countByUser(userId, filters, trx = db) {
+      let q = trx('payments').where({ user_id: userId });
+      if (filters.purpose) q = q.andWhere({ purpose: filters.purpose });
+      if (filters.status) q = q.andWhere({ status: filters.status });
+      const [{ n }] = await q.count({ n: '*' });
+      return Number(n);
+    },
+
     async listByClub(clubId, filters, trx = db) {
       let q = trx('payments').where({ club_id: clubId }).orderBy('created_at', 'desc');
       if (filters.purpose) q = q.andWhere({ purpose: filters.purpose });

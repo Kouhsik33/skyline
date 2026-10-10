@@ -25,7 +25,7 @@ export function createEventController({ eventService }) {
     },
 
     async checkIn(req, res) {
-      const result = await eventService.checkIn(req.userId, req.params.eventId, req.body.qrPayload);
+      const result = await eventService.checkIn({ userId: req.userId }, req.params.eventId, req.body.qrPayload);
       res.status(201).json({ data: result });
     },
 

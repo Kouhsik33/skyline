@@ -1,51 +1,30 @@
 import cron from 'node-cron';
-import { config } from '../config/index.js';
-import { todayIST } from '../shared/clock.js';
-import { runJob } from './runJob.js';
-import { logger } from '../shared/logger.js';
 
-export function startScheduler(jobs) {
-  if (!config.JOBS_ENABLED) {
-    logger.info('Jobs disabled');
-    return { stop: () => {} };
-  }
+// node-cron registrations for every job in the registry (LLD §7), in APP_TIMEZONE (IST).
+// Each tick goes through runJob: advisory lock per job name, job_runs row per day for daily jobs,
+// failures recorded and logged. Disabled with JOBS_ENABLED=false (tests call jobs directly).
 
+export function createScheduler({ registry, timeZone, logger }) {
   const tasks = [];
-
-  tasks.push(
-    cron.schedule('0 0 * * *', () => {
-      runJob('membership-expiry', todayIST(), () => jobs.membershipExpiry.execute()).catch((err) =>
-        logger.error({ err }, 'membership-expiry failed'),
-      );
-    }),
-  );
-
-  tasks.push(
-    cron.schedule('0 9 * * *', () => {
-      runJob('renewal-reminders', todayIST(), (trx) => jobs.renewalReminders.execute(trx)).catch((err) =>
-        logger.error({ err }, 'renewal-reminders failed'),
-      );
-    }),
-  );
-
-  tasks.push(
-    cron.schedule('0 6 * * *', () => {
-      runJob('autopay-renewals', todayIST(), () => jobs.autopayRenewals.execute()).catch((err) =>
-        logger.error({ err }, 'autopay-renewals failed'),
-      );
-    }),
-  );
-
-  tasks.push(
-    cron.schedule('*/5 * * * *', () => {
-      runJob(`reservation-expiry-${Date.now()}`, 'tick', () => jobs.reservationExpiry.execute()).catch((err) =>
-        logger.error({ err }, 'reservation-expiry failed'),
-      );
-    }),
-  );
-
-  logger.info('Scheduler started');
-  return {
-    stop: () => tasks.forEach((t) => t.stop()),
-  };
+  return Object.freeze({
+    start() {
+      for (const name of registry.names()) {
+        const { cron: expression } = registry.get(name);
+        tasks.push(
+          cron.schedule(
+            expression,
+            () => {
+              registry.run(name).catch((err) => logger.error({ err, job: name }, 'scheduler: job crashed'));
+            },
+            { timezone: timeZone, name },
+          ),
+        );
+      }
+      logger.info({ jobs: registry.names() }, 'Scheduler started');
+    },
+    async stop() {
+      await Promise.all(tasks.map((t) => t.stop()));
+      tasks.length = 0;
+    },
+  });
 }

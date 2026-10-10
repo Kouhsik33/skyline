@@ -32,8 +32,8 @@ describe('no floating-point money', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('migrations and the Group 1 fixture use no fractional column types', () => {
-    const sources = [...files(path.join(root, 'src/db/migrations')), path.join(root, 'tests/fixtures/group1_schema.sql')];
+  it('migrations use no fractional column types', () => {
+    const sources = files(path.join(root, 'src/db/migrations'));
     const offenders = [];
     for (const file of sources) {
       readFileSync(file, 'utf8')

@@ -114,7 +114,7 @@ describe('catalogue (T-60)', () => {
     await makeActiveMember(ctx.db, club, member);
     expect((await nonMember.get(`/api/v1/products/${product.id}`)).body.data).toMatchObject({ membersOnly: true, displayPrice: null });
     expect((await (await ctx.signIn(member.id)).get(`/api/v1/products/${product.id}`)).body.data.displayPrice).toEqual({
-      listPricePaise: 70000, discountPaise: 0, finalPricePaise: 70000, priceRule: 'LIST',
+      listPricePaise: 70000, discountPaise: 7000, finalPricePaise: 63000, priceRule: 'MEMBER_DISCOUNT', // real pricing, plan 10 %
     });
   });
 

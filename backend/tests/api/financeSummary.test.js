@@ -189,7 +189,7 @@ describe('finance summary, transactions, reconciliation (T-83)', () => {
     ]);
     // rolled back: trigger and rows are back
     expect((await recon.reconcile(A.club.id)).ok).toBe(true);
-    await expect(ctx.db('financial_transactions').where({ source_id: payoutId }).del()).rejects.toThrow(/not allowed/);
+    await expect(ctx.db('financial_transactions').where({ source_id: payoutId }).del()).rejects.toThrow(/forbidden on financial_transactions/);
   });
 
   it('TC-FIN-05: a ledger row whose source is no longer SUCCEEDED is check (d)', async () => {

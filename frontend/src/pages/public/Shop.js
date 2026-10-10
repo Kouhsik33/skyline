@@ -13,11 +13,14 @@ import { useToast } from '../../components/Toast';
 import { errorMessage } from '../../utils/errorMessages';
 import { formatDateTime } from '../../utils/dates';
 import { sizeLabel } from '../../utils/status';
+import { CART_KEY_PREFIX } from '../../auth/clientState';
 
-const cartKey = (clubId) => `soms.cart.${clubId}`;
+// Cart lives for the tab only (sessionStorage) and holds no prices: CartPanel re-quotes on the
+// server every time, and sign-out clears it (auth/clientState.js).
+const cartKey = (clubId) => `${CART_KEY_PREFIX}${clubId}`;
 function loadCart(clubId) {
   try {
-    return JSON.parse(window.localStorage.getItem(cartKey(clubId))) || [];
+    return JSON.parse(window.sessionStorage.getItem(cartKey(clubId))) || [];
   } catch {
     return [];
   }
@@ -181,7 +184,7 @@ export default function Shop() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(cartKey(clubId), JSON.stringify(cart));
+      window.sessionStorage.setItem(cartKey(clubId), JSON.stringify(cart));
     } catch {
       /* ignore */
     }

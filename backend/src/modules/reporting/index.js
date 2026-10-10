@@ -10,8 +10,8 @@ import { createClubFinanceReportingRoutes } from './routesClub.js';
 
 export { createEventReportingRoutes, createEventReportingRoutes as createReportingRoutes };
 
-export function createReportingModule({ db, financeSummary, timeZone }) {
-  const reporting = createReportingService({ db, financeSummary, timeZone });
+export function createReportingModule({ db, financeSummary, timeZone, clock }) {
+  const reporting = createReportingService({ db, financeSummary, timeZone, clock });
   const controller = createReportingController({ reporting });
   return Object.freeze({
     service: reporting,

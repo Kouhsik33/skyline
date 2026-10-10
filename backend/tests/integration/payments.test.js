@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildTestContext } from '../helpers/testApp.js';
 import { truncateAll } from '../helpers/testDb.js';
-import { makeClub, makeMembershipPayment, makePendingTerm, makePlan, makeUser } from '../fixtures/factories.js';
+import { makeMembershipPayment } from '../fixtures/factories.js';
 
 // payments.create / payments.settle (LLD §2.10, §5) against real PostgreSQL.
 
@@ -81,17 +81,18 @@ describe('payments service', () => {
         reference: `SIM-${Math.random().toString(36).slice(2, 14)}`,
         ...row,
       });
-    await expect(insert({ is_simulated: false })).rejects.toThrow(/payments_is_simulated_check/);
-    await expect(insert({ membership_term_id: null })).rejects.toThrow(/payments_one_target_chk/);
-    await expect(insert({ amount_paise: 0 })).rejects.toThrow(/payments_amount_paise_check/);
-    await expect(insert({ currency: 'USD' })).rejects.toThrow(/payments_currency_check/);
+    // Constraint names from merged migration 009 (Group 1 wrote the table).
+    await expect(insert({ is_simulated: false })).rejects.toThrow(/pay_sim/);
+    await expect(insert({ membership_term_id: null })).rejects.toThrow(/pay_target/);
+    await expect(insert({ amount_paise: 0 })).rejects.toThrow(/pay_amount/);
+    await expect(insert({ currency: 'USD' })).rejects.toThrow(/pay_currency/);
   });
 
   it('settle SUCCEEDED: conditional update, handler once, one ledger row at settled_at', async () => {
     const { payment } = await makeMembershipPayment(ctx);
     const out = await settle(payment.id, 'SUCCEEDED');
     expect(out.settled).toBe(true);
-    expect(out.result).toEqual({ handled: 'MEMBERSHIP_JOIN' });
+    expect(out.result).toMatchObject({ membershipStatus: 'ACTIVE' }); // real Group 1 handler
     expect(out.payment).toMatchObject({ status: 'SUCCEEDED', failure_reason: null });
     expect(out.payment.settled_at.toISOString()).toBe(ctx.clock.now().toISOString());
     expect(ctx.handlerCalls).toEqual([{ purpose: 'MEMBERSHIP_JOIN', hook: 'onSucceeded', paymentId: payment.id }]);
@@ -152,34 +153,29 @@ describe('payments service', () => {
   });
 
   it('settle with no registered handler for the purpose fails and changes nothing', async () => {
-    const bare = buildTestContext({ paymentHandlers: [] });
-    try {
-      const { payment } = await makeMembershipPayment(bare);
-      await expect(
-        bare.container.withTransaction((trx) => bare.container.finance.payments.settle(payment.id, 'SUCCEEDED', trx)),
-      ).rejects.toThrow(/no payment handler registered for MEMBERSHIP_JOIN/);
-      expect((await bare.db('payments').where({ id: payment.id }).first()).status).toBe('INITIATED');
-    } finally {
-      await bare.close();
-    }
+    // The merged container always registers all four purposes, so use a fresh empty registry.
+    const { createPaymentService } = await import('../../src/modules/finance/payments/service.js');
+    const { createHandlerRegistry } = await import('../../src/modules/finance/payments/handlerRegistry.js');
+    const bare = createPaymentService({
+      db: ctx.db,
+      withTransaction: ctx.container.withTransaction,
+      clock: ctx.clock,
+      registry: createHandlerRegistry(),
+      timeZone: 'Asia/Kolkata',
+      logger: ctx.logger,
+    });
+    const { payment } = await makeMembershipPayment(ctx);
+    await expect(ctx.container.withTransaction((trx) => bare.settle(payment.id, 'SUCCEEDED', trx))).rejects.toThrow(
+      /no payment handler registered for MEMBERSHIP_JOIN/,
+    );
+    expect((await ctx.db('payments').where({ id: payment.id }).first()).status).toBe('INITIATED');
   });
 
-  it('default container wiring: the TODO(group1) membership stub is registered and records the call', async () => {
-    const { createContainer } = await import('../../src/container.js');
-    const { createLogger } = await import('../../src/shared/logger.js');
-    const container = createContainer({ config: ctx.config, db: ctx.db, logger: createLogger({ level: 'silent' }), clock: ctx.clock });
-    try {
-      const clubData = await makeClub(ctx.db);
-      const user = await makeUser(ctx.db);
-      const plan = await makePlan(ctx.db, clubData.club, clubData.head);
-      const { term } = await makePendingTerm(ctx.db, { club: clubData.club, user, plan });
-      const payment = await container.withTransaction((trx) =>
-        container.finance.payments.create(trx, { clubId: clubData.club.id, userId: user.id, purpose: 'MEMBERSHIP_JOIN', membershipTermId: term.id, amountPaise: plan.fee_paise }),
-      );
-      await container.withTransaction((trx) => container.finance.payments.settle(payment.id, 'SUCCEEDED', trx));
-      expect(container.membershipHandlerCalls).toEqual([{ purpose: 'MEMBERSHIP_JOIN', hook: 'onSucceeded', paymentId: payment.id }]);
-    } finally {
-      await container.sessionPool.end();
-    }
+  it('production wiring: one registry serves all four purposes for both payment engines', async () => {
+    expect(ctx.container.handlerRegistry.purposes().sort()).toEqual(['EVENT_TICKET', 'MEMBERSHIP_JOIN', 'MEMBERSHIP_RENEWAL', 'MERCH_ORDER']);
+    // A payment settled through Group 2's engine runs Group 1's real membership handler.
+    const { payment, membership } = await makeMembershipPayment(ctx);
+    await settle(payment.id, 'SUCCEEDED');
+    expect((await ctx.db('memberships').where({ id: membership.id }).first()).status).toBe('ACTIVE');
   });
 });

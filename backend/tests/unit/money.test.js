@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBps, assertPositivePaise, format, multiply, sum } from '../../src/shared/money.js';
+import { applyBps, assertPositivePaise, format, multiply, sum, sumPaise } from '../../src/shared/money.js';
 
 describe('money (ADR-008)', () => {
   it('applyBps rounds half-up to the paise: floor((p*bps+5000)/10000)', () => {
@@ -28,6 +28,7 @@ describe('money (ADR-008)', () => {
   it('sum and multiply are integer-only and overflow-checked', () => {
     expect(sum([100, 250, 1])).toBe(351);
     expect(sum([])).toBe(0);
+    expect(sumPaise([100, 250, 1])).toBe(351); // Group 1 name, same integer-only implementation
     expect(multiply(1999, 3)).toBe(5997);
     expect(() => sum([0.1, 0.2])).toThrow(TypeError);
     expect(() => multiply(Number.MAX_SAFE_INTEGER, 2)).toThrow(RangeError);

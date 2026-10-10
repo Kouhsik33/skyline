@@ -25,9 +25,11 @@ describe('payments API (LLD §4.4)', () => {
       const { payment, user, term } = await makeMembershipPayment(ctx);
       const res = await (await ctx.signIn(user.id)).get(`/api/v1/payments/${payment.id}`);
       expect(res.status).toBe(200);
-      expect(res.body.data).toEqual({
+      // Merged contract (Group 1 route): camelCase payment row + target (OQ-24).
+      expect(res.body.data).toMatchObject({
         id: payment.id,
         clubId: payment.club_id,
+        userId: user.id,
         purpose: 'MEMBERSHIP_JOIN',
         target: { type: 'MEMBERSHIP_TERM', id: term.id },
         amountPaise: 50000,
@@ -61,17 +63,18 @@ describe('payments API (LLD §4.4)', () => {
         status: 'SUCCEEDED',
         purpose: 'MEMBERSHIP_JOIN',
         isSimulated: true,
-        settledAt: ctx.clock.now().toISOString(),
-        result: { handled: 'MEMBERSHIP_JOIN' },
+        result: { membershipStatus: 'ACTIVE' }, // the real Group 1 membership handler
       });
+      expect((await ctx.db('memberships').where({ user_id: user.id }).first()).status).toBe('ACTIVE');
       expect(await ctx.db('financial_transactions').where({ payment_id: payment.id, category: 'MEMBERSHIP_DUES' })).toHaveLength(1);
     });
 
     it('FAILED settles with onFailed and no ledger row', async () => {
       const { payment, user } = await makeMembershipPayment(ctx);
       const res = await simulate(await ctx.signIn(user.id), payment.id, 'FAILED');
-      expect(res.body.data).toMatchObject({ status: 'FAILED', failureReason: 'FAILED', result: { released: true } });
-      expect(ctx.handlerCalls).toEqual([{ purpose: 'MEMBERSHIP_JOIN', hook: 'onFailed', paymentId: payment.id, reason: 'FAILED' }]);
+      expect(res.body.data).toMatchObject({ status: 'FAILED', failureReason: 'USER_SIMULATED_FAIL', result: null });
+      expect(ctx.handlerCalls).toEqual([{ purpose: 'MEMBERSHIP_JOIN', hook: 'onFailed', paymentId: payment.id, reason: 'USER_SIMULATED_FAIL' }]);
+      expect((await ctx.db('memberships').where({ user_id: user.id }).first()).status).toBe('CANCELLED');
       expect(await ctx.db('financial_transactions')).toHaveLength(0);
     });
 

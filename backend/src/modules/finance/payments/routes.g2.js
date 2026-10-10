@@ -30,6 +30,19 @@ export function createPaymentRoutes({ controller, requireAuth, idempotency, requ
   return router;
 }
 
+/** GET /clubs/:clubId/payments (TR, CH; LLD §4.4). The other payment routes are Group 1's. */
+export function createClubPaymentRoutes({ controller, requireAuth, requireClubRole }) {
+  const router = Router();
+  router.get(
+    '/clubs/:clubId/payments',
+    requireAuth,
+    validate({ params: clubIdParams, query: clubPaymentsQuery }),
+    requireClubRole(['TREASURER', 'CLUB_HEAD']),
+    controller.listForClub,
+  );
+  return router;
+}
+
 /** Dev tools only (LLD §4.11): resolves any payment, including AutoPay PENDING ones. */
 export function createDevPaymentRoutes({ controller, requireAuth }) {
   const router = Router();

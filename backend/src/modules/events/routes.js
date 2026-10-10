@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth, optionalAuth } from '../../shared/middleware/requireAuth.js';
+import { requireAuth } from '../../shared/middleware/requireAuth.js';
 import { csrfHeader } from '../../shared/middleware/csrfHeader.js';
 import { validate } from '../../shared/middleware/validate.js';
 import { requireIdempotencyKey, idempotencyMiddleware } from '../../shared/middleware/idempotency.js';

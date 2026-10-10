@@ -24,10 +24,10 @@ describe('ledger', () => {
   it('TC-FIN-04: UPDATE and DELETE on financial_transactions raise an exception', async () => {
     const { row } = await settledPaymentWithLedgerRow();
     await expect(ctx.db('financial_transactions').where({ id: row.id }).update({ amount_paise: 1 })).rejects.toThrow(
-      /UPDATE on financial_transactions is not allowed/,
+      /forbidden on financial_transactions/,
     );
     await expect(ctx.db('financial_transactions').where({ id: row.id }).del()).rejects.toThrow(
-      /DELETE on financial_transactions is not allowed/,
+      /forbidden on financial_transactions/,
     );
     const after = await ctx.db('financial_transactions').where({ id: row.id }).first();
     expect(after.amount_paise).toBe(row.amount_paise);

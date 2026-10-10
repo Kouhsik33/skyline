@@ -32,8 +32,8 @@ describe('audit.record', () => {
 
   it('is append-only and validates its input', async () => {
     const row = await ctx.container.withTransaction((trx) => audit.record(trx, { action: 'EXPENSE_PAID', entityType: 'expense' }));
-    await expect(ctx.db('audit_logs').where({ id: row.id }).update({ action: 'X' })).rejects.toThrow(/not allowed/);
-    await expect(ctx.db('audit_logs').where({ id: row.id }).del()).rejects.toThrow(/not allowed/);
+    await expect(ctx.db('audit_logs').where({ id: row.id }).update({ action: 'X' })).rejects.toThrow(/forbidden on audit_logs/);
+    await expect(ctx.db('audit_logs').where({ id: row.id }).del()).rejects.toThrow(/forbidden on audit_logs/);
     await expect(audit.record(null, { action: 'X', entityType: 'y' })).rejects.toThrow(/transaction/);
     await expect(ctx.container.withTransaction((trx) => audit.record(trx, { action: 'lower', entityType: 'y' }))).rejects.toThrow(
       /UPPER_SNAKE_CASE/,

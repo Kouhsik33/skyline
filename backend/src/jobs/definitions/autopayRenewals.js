@@ -1,5 +1,4 @@
 import { todayIST } from '../../shared/clock.js';
-import { randomToken } from '../../shared/tokens.js';
 import { withTransaction } from '../../db/transaction.js';
 
 export function createAutopayRenewalsJob({
@@ -7,7 +6,7 @@ export function createAutopayRenewalsJob({
   membershipRepository,
   paymentService,
   authService,
-  notificationService,
+  notificationService: _notificationService,
 }) {
   return {
     name: 'autopay-renewals',

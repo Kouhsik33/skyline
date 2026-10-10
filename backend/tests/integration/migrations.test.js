@@ -1,8 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import knexFactory from 'knex';
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
+
+const MIGRATIONS = readdirSync(path.resolve('src/db/migrations')).filter((f) => /^\d{3}_.+\.js$/.test(f)).length;
 import { createAdminDb, createTestDb, migrateLatest, rollbackAll, testDatabaseUrl } from '../helpers/testDb.js';
 
-// T-13 acceptance: migrate:latest and rollback succeed on a fresh database with the fixture.
+// T-13 acceptance: migrate:latest and rollback succeed on a fresh database (all real migrations).
 // Runs against a scratch database so the shared soms_test schema is untouched.
 
 const SCRATCH = 'soms_migration_check_test';
@@ -34,23 +38,23 @@ describe('migrations up/down (T-13)', () => {
   });
 
   it('latest → rollback all → latest again, on a fresh database', async () => {
-    const [, applied] = await migrateLatest(scratch, 'fixture');
-    expect(applied).toHaveLength(9);
+    const [, applied] = await migrateLatest(scratch);
+    expect(applied).toHaveLength(MIGRATIONS);
     const afterUp = await tables(scratch);
     for (const t of ['audit_logs', 'idempotency_keys', 'job_runs', 'uploaded_files', 'payments', 'financial_transactions', 'expenses', 'budgets', 'orders', 'fundraisers', 'users', 'clubs']) {
       expect(afterUp).toContain(t);
     }
 
-    const [, rolledBack] = await rollbackAll(scratch, 'fixture');
-    expect(rolledBack).toHaveLength(9);
+    const [, rolledBack] = await rollbackAll(scratch);
+    expect(rolledBack).toHaveLength(MIGRATIONS);
     expect(await tables(scratch)).toEqual([]);
     const { rows: fns } = await scratch.raw(
       `SELECT proname FROM pg_proc WHERE proname IN ('set_updated_at', 'forbid_update_delete')`,
     );
     expect(fns).toEqual([]);
 
-    const [, reapplied] = await migrateLatest(scratch, 'fixture');
-    expect(reapplied).toHaveLength(9);
+    const [, reapplied] = await migrateLatest(scratch);
+    expect(reapplied).toHaveLength(MIGRATIONS);
   });
 });
 

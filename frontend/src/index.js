@@ -9,6 +9,7 @@ import App from './App';
 import { ThemeProvider } from './components/Theme';
 import { ToastProvider } from './components/Toast';
 import { AuthProvider } from './auth/AuthProvider';
+import { installBfcacheGuard } from './auth/clientState';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,6 +20,8 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+installBfcacheGuard();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

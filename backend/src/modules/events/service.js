@@ -2,7 +2,7 @@ import { AppError, assertFound } from '../../shared/errors.js';
 import { withTransaction } from '../../db/transaction.js';
 import { config } from '../../config/index.js';
 import { now } from '../../shared/clock.js';
-import { buildTicketQrPayload, parseTicketQrPayload, renderQrSvg } from '../../shared/qr.js';
+import { parseTicketQrPayload } from '../../shared/qr.js';
 import { assertTransition } from './domain/eventStateMachine.js';
 import { deriveSalesStatus } from './domain/salesWindow.js';
 import { PRICE_TIERS } from '../pricing/PricingPolicy.js';
@@ -106,6 +106,13 @@ export function createEventService({
     },
 
     async book(actor, eventId, expectedFinalPricePaise) {
+      // Benefits are read BEFORE the transaction: getActiveBenefits uses its own pool connection,
+      // and calling it while holding the event row lock serialised bookings and starved the pool
+      // under concurrency (T-90 / TC-EVT-01, same class as OQ-59).
+      const eventForClub = await eventRepository.findById(eventId);
+      assertFound(eventForClub, 'Event not found');
+      const benefits = await membershipService.getActiveBenefits(actor.userId, eventForClub.clubId);
+
       return withTransaction(async (trx) => {
         const existing = await eventRepository.findLiveBooking(eventId, actor.userId, trx);
         if (existing) throw new AppError('ALREADY_BOOKED', 409, 'Already booked');
@@ -113,18 +120,12 @@ export function createEventService({
         const event = await eventRepository.findForUpdate(eventId, trx);
         assertFound(event, 'Event not found');
 
-        const benefits = await membershipService.getActiveBenefits(actor.userId, event.clubId);
         const ebRemaining =
           event.earlyBirdQuantity == null
             ? null
             : event.earlyBirdQuantity - event.earlyBirdReserved;
 
-        let quote;
-        try {
-          quote = pricingPolicy.quoteTicket(event, benefits, ebRemaining);
-        } catch (err) {
-          throw err;
-        }
+        const quote = pricingPolicy.quoteTicket(event, benefits, ebRemaining);
 
         if (quote.final !== expectedFinalPricePaise) {
           throw new AppError('PRICE_CHANGED', 409, 'Price changed', {

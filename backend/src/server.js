@@ -2,18 +2,20 @@ import { createContainer } from './container.js';
 import { createApp } from './app.js';
 import { config } from './config/index.js';
 import { logger } from './shared/logger.js';
-import { startScheduler } from './jobs/scheduler.js';
+import { createScheduler } from './jobs/scheduler.js';
 
 const container = createContainer();
 const app = createApp(container);
-const scheduler = startScheduler(container.jobs);
+const scheduler = createScheduler({ registry: container.jobs, timeZone: config.APP_TIMEZONE, logger });
+if (config.JOBS_ENABLED) scheduler.start();
+else logger.info('Jobs disabled');
 
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT }, 'SOMS backend listening');
 });
 
-function shutdown() {
-  scheduler.stop();
+async function shutdown() {
+  await scheduler.stop();
   server.close(() => {
     container.db.destroy().finally(() => process.exit(0));
   });

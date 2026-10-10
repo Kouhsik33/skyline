@@ -23,7 +23,7 @@ export function createMembershipService({
   membershipRepository,
   paymentService,
   authService,
-  authz,
+  authz: _authz,
   clubRepository,
 }) {
   async function assertVerified(userId) {
@@ -248,7 +248,7 @@ export function createMembershipService({
       return this.getDigitalId(userId, membershipId);
     },
 
-    async verifyMembershipQr(actorUserId, qrPayload, requestId) {
+    async verifyMembershipQr(actorUserId, qrPayload, _requestId) {
       const { parseMembershipQrPayload } = await import('../../shared/qr.js');
       const token = parseMembershipQrPayload(qrPayload);
       if (!token) throw new AppError('INVALID_QR_FORMAT', 400, 'Invalid QR format');
