@@ -19,6 +19,21 @@ PostgreSQL 16 required. Tests use `TEST_DATABASE_URL` or `DATABASE_URL` (databas
 npm test
 ```
 
+## Demo data (dev only)
+
+`npm run seed` is a no-op by design: the college roster is mocked and nobody is pre-verified. For clicking through every role you can instead load the same story the frontend's in-browser demo tells (3 clubs, 42 users, events with tickets and check-ins, merchandise orders, fundraisers, expenses, a ledger that reconciles):
+
+```bash
+docker compose exec backend npm run seed:demo           # add the data; no-op if it is already there
+docker compose exec backend npm run seed:demo -- --reset # EMPTY EVERY TABLE, then reload (also refreshes the dates)
+```
+
+Run it inside the container so the database host, the verification key and the receipt folder (`UPLOAD_DIR`) all match the running API. From the host, set `DATABASE_URL=postgres://soms:soms@localhost:5433/soms` (port 5433 is this project's Postgres; 5432 may be another project's).
+
+Every demo account has password **`demo1234`** and is created already college-verified, which the real register flow never allows, so the script refuses to run when `NODE_ENV=production`. Accounts: `asha@srkrec.ac.in` (club head Skyline), `ravi@srkrec.ac.in` (treasurer), `meera@srkrec.ac.in` (volunteer/staff), `karthik@srkrec.ac.in` (club head Photography, treasurer Robotics, organizer), `vikram@srkrec.ac.in` (club head Robotics), `priya.nair@gmail.com` (no roles, unverified). With `REACT_APP_SHOW_DEMO_ACCOUNTS=true` (set in `frontend/.env.development`) the sign-in page shows them as one-click buttons.
+
+Dates are relative to the day you run it, so re-run with `--reset` when they go stale. Code: `scripts/seed-demo.js`, `src/db/demo/seedDemo.js`.
+
 ## API testing (Postman / cURL)
 
 Import **`postman/SOMS-Group1.postman_collection.json`** and **`postman/SOMS-Local.postman_environment.json`**. Step-by-step cURLs: **`postman/CURL-WALKTHROUGH.md`**. Before publishing events, run **`postman/setup-organizer.sql`** (organizer routes not wired yet).
