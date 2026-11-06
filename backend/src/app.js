@@ -13,10 +13,9 @@ import { db } from './db/knex.js';
 export function createApp(container) {
   const app = express();
 
-  // CRA dev server proxies /api/v1 → backend; needed for secure cookies / session behind proxy.
-  if (!config.isProduction) {
-    app.set('trust proxy', 1);
-  }
+  // Behind reverse proxies (e.g. Render, Cloudflare, CRA dev server proxy).
+  // Required so express and express-session detect HTTPS correctly and issue secure cookies.
+  app.set('trust proxy', 1);
 
   app.use(helmet());
   const corsOrigins = config.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean);
